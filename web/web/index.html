@@ -1,0 +1,140 @@
+<!DOCTYPE HTML>
+	<html>
+	<head>
+	<meta charset="utf-8">
+
+	<title>GLCD Test</title>
+
+	<meta name="viewport" content="width=device-width,user-scalable=no" /> 
+	
+	<style>
+	body{
+		margin: 0px; padding: 0px;
+	}
+	canvas {
+		margin: 0px; padding: 0px;
+		border-style: solid;
+		border-width: 3px;
+		border-color: #999;
+	}
+	</style>
+	
+	<script src="/socket.io/socket.io.js"></script>
+	
+</head>
+<body>
+	<!-- w = 128x2-10, h = 64x2-10 -->
+	<canvas id="sketch_canvas" width="246" height="118"></canvas>
+
+	<script type="text/javascript">
+	/**
+	 * Sketch JS
+	 */
+
+	var ctx = document.getElementById("sketch_canvas").getContext("2d");
+
+	var pX = new Array();
+	var pY = new Array();
+	var isDrag = new Array();
+	var sequence = [];
+	
+	function isiDevice() {
+		var ua = navigator.userAgent.match(/iP/);
+		return (ua == null) ? false : true;
+	}
+
+	function addPoint(x, y, dragging) {
+		pX.push(x);
+		pY.push(y);
+		isDrag.push(dragging);
+	}
+
+	function redraw() {
+		ctx.strokeStyle = "#00aaaa";
+		ctx.lineJoin = "round";
+		ctx.lineWidth = 6;
+		var ppX, ppY;
+		for(var i = 0; i < pX.length; i++) {
+			sequence[i] = [];
+			ctx.beginPath();
+			if(isDrag[i] && i > 0) {
+				ppX = pX[i-1];
+				ppY = pY[i-1];
+			} else {
+				ppX = pX[i] - 1;
+				ppY = pY[i];
+			}
+			ctx.moveTo(ppX, ppY);
+			ctx.lineTo(pX[i], pY[i]);
+			if(ppX >= 0 && ppX <= 246 && ppY >= 0 && ppY <= 118) {
+				sequence[i][0] = [Math.round(ppX/2), Math.round(ppY/2)];
+				sequence[i][1] = [Math.round(pX[i]/2), Math.round(pY[i]/2)];
+			}
+			ctx.closePath();
+			ctx.stroke();
+		}
+		if(sendable) {
+			for(var i = 0; i < sequence.length; i++) {
+				socket.emit("message", {value: "{" + sequence[i][0].join(",") + ":" + sequence[i][1].join(",") + "}"});
+			}
+			sequence = [];
+			sendable = false;
+		}
+		pX = new Array();
+		pY = new Array();
+	}
+
+	var sendable = false;
+	
+	var socket = io.connect("/", {
+		"reconnect" : true,
+		"reconnection delay" : 500,
+		"max reconnection attempts" : 10
+	});
+	
+	socket.on("connect", function(data) {});
+	
+	socket.on("message", function (data) {
+		if(data == "ok") {
+			sendable = true;
+		} else {
+			sendable = false;
+		}
+	});
+
+	var isPaint;
+
+	function pendown(e) {
+		if(isiDevice()) {
+			e.preventDefault();
+			e = e.targetTouches[0];
+		}
+		isPaint = true;
+		addPoint(e.pageX, e.pageY, false);
+		redraw();
+	}
+	document.getElementById("sketch_canvas").addEventListener("mousedown", pendown, false);
+	document.getElementById("sketch_canvas").addEventListener("touchstart", pendown, false);
+
+	function penmove(e) {
+		if(isiDevice()) {
+			e.preventDefault();
+			e = e.targetTouches[0];
+		}
+		if(isPaint){
+			addPoint(e.pageX, e.pageY, true);
+			redraw();
+		}
+	}
+	document.getElementById("sketch_canvas").addEventListener("mousemove", penmove, false);
+	document.getElementById("sketch_canvas").addEventListener("touchmove", penmove, false);
+
+	function penup(e) {
+		isPaint = false;
+	}
+	document.getElementById("sketch_canvas").addEventListener("mouseup", penup, false);
+	document.getElementById("sketch_canvas").addEventListener("touchend", penup, false);
+
+	</script>
+</body>
+</html>
